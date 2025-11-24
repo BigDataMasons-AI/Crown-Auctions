@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 42 25% 97%;
+    --foreground: 30 10% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 30 10% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 10% 15%;
+
+    --primary: 30 10% 15%;
+    --primary-foreground: 42 25% 97%;
+
+    --secondary: 42 15% 92%;
+    --secondary-foreground: 30 10% 15%;
+
+    --muted: 42 15% 92%;
+    --muted-foreground: 30 8% 45%;
+
+    --accent: 43 74% 49%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 42 20% 88%;
+    --input: 42 20% 88%;
+    --ring: 43 74% 49%;
+
+    --radius: 0.25rem;
+
+    --gold: 43 74% 49%;
+    --gold-light: 45 85% 65%;
+    --gold-dark: 40 60% 35%;
+    
+    --luxury-bg: 30 10% 15%;
+    --luxury-text: 42 25% 97%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 30 10% 10%;
+    --foreground: 42 25% 97%;
+
+    --card: 30 10% 15%;
+    --card-foreground: 42 25% 97%;
+
+    --popover: 30 10% 15%;
+    --popover-foreground: 42 25% 97%;
+
+    --primary: 42 25% 97%;
+    --primary-foreground: 30 10% 15%;
+
+    --secondary: 30 8% 20%;
+    --secondary-foreground: 42 25% 97%;
+
+    --muted: 30 8% 20%;
+    --muted-foreground: 42 15% 65%;
+
+    --accent: 43 74% 49%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 42 25% 97%;
+
+    --border: 30 8% 25%;
+    --input: 30 8% 25%;
+    --ring: 43 74% 49%;
+    
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+@layer utilities {
+  .font-serif {
+    font-family: 'Playfair Display', serif;
+  }
+  
+  .font-sans {
+    font-family: 'Inter', sans-serif;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 1.2s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

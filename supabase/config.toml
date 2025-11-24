@@ -1,0 +1,13 @@
+project_id = "xnzikbvgncdhzmssdzyx"
+
+[functions.send-outbid-notification]
+verify_jwt = false
+
+[functions.predict-auction-price]
+verify_jwt = false
+
+[functions.send-auction-status-email]
+verify_jwt = false
+
+[functions.send-submission-withdrawal-email]
+verify_jwt = false
