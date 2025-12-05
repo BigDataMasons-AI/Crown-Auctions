@@ -1,6 +1,10 @@
 -- Fix check_bid_rate_limit function to accept TEXT auction_id instead of UUID
 -- The auctions table uses TEXT for id, not UUID
+-- First, drop the old UUID version to avoid function overloading conflicts
 
+DROP FUNCTION IF EXISTS public.check_bid_rate_limit(user_id uuid, auction_id uuid);
+
+-- Now create the function with TEXT auction_id
 CREATE OR REPLACE FUNCTION public.check_bid_rate_limit(user_id uuid, auction_id text)
 RETURNS boolean
 LANGUAGE plpgsql

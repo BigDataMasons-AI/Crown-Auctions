@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -221,6 +221,7 @@ export default function AuctionDetail() {
   const [loading, setLoading] = useState(true);
   const { bids, loading: bidsLoading, currentHighestBid, placeBid } = useAuctionBids(id);
   const { trackAuction } = useBidNotifications();
+  const bidFormRef = useRef<HTMLFormElement>(null);
 
   // Fetch auction data from database
   useEffect(() => {
@@ -382,11 +383,19 @@ export default function AuctionDetail() {
       return;
     }
 
+    // Store the bid amount before clearing
+    const submittedBidAmount = bidValue;
+    
     const success = await placeBid(bidValue, minimumBid);
     if (success && id) {
       // Track this auction for outbid notifications
-      trackAuction(id, bidValue);
+      trackAuction(id, submittedBidAmount);
+      // Clear the form immediately after successful bid
       setBidAmount("");
+      // Also reset the form if it exists
+      if (bidFormRef.current) {
+        bidFormRef.current.reset();
+      }
     }
   };
 
@@ -498,11 +507,12 @@ export default function AuctionDetail() {
                       </p>
                     </div>
                   ) : auctionStatus === 'paused' ? null : (
-                    <>
+                    <form ref={bidFormRef} onSubmit={(e) => { e.preventDefault(); handlePlaceBid(); }}>
                       <div>
                         <Label htmlFor="bid-amount">Your Bid Amount (AUD)</Label>
                         <Input
                           id="bid-amount"
+                          name="bid-amount"
                           type="number"
                           placeholder={formatPrice(minimumBid)}
                           value={bidAmount}
@@ -551,15 +561,15 @@ export default function AuctionDetail() {
                       </div>
 
                       <Button 
-                        onClick={handlePlaceBid} 
+                        type="submit"
                         variant="gold" 
                         size="lg" 
-                        className="w-full"
+                        className="w-full mt-4"
                         disabled={auctionStatus !== 'active'}
                       >
                         {auctionStatus !== 'active' ? 'Bidding Disabled' : 'Place Bid'}
                       </Button>
-                    </>
+                    </form>
                   )}
                 </CardContent>
               </Card>

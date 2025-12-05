@@ -118,6 +118,10 @@ export const useAuctionBids = (auctionId: string | undefined) => {
       if (error) throw error;
 
       toast.success('Bid placed successfully!');
+      
+      // Refresh bids immediately to update UI
+      await fetchBids();
+      
       return true;
     } catch (error: any) {
       console.error('Error placing bid:', error);
@@ -131,5 +135,6 @@ export const useAuctionBids = (auctionId: string | undefined) => {
     loading,
     currentHighestBid,
     placeBid,
+    fetchBids, // Expose fetchBids for manual refresh if needed
   };
 };
