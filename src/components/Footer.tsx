@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export const Footer = () => {
   return (
     <footer className="bg-luxury-bg text-luxury-text py-12">
@@ -16,17 +18,17 @@ export const Footer = () => {
           <div>
             <h4 className="font-bold mb-4 text-gold">Quick Links</h4>
             <ul className="space-y-2 text-sm">
-              <li><a href="#home" className="text-luxury-text/70 hover:text-gold transition-colors">Home</a></li>
-              <li><a href="#about" className="text-luxury-text/70 hover:text-gold transition-colors">About Us</a></li>
-              <li><a href="#buyers" className="text-luxury-text/70 hover:text-gold transition-colors">Buyers</a></li>
-              <li><a href="#sellers" className="text-luxury-text/70 hover:text-gold transition-colors">Sellers</a></li>
+              <li><Link to="/#home" className="text-luxury-text/70 hover:text-gold transition-colors">Home</Link></li>
+              <li><Link to="/#about" className="text-luxury-text/70 hover:text-gold transition-colors">About Us</Link></li>
+              <li><Link to="/#buyers" className="text-luxury-text/70 hover:text-gold transition-colors">Buyers</Link></li>
+              <li><Link to="/#sellers" className="text-luxury-text/70 hover:text-gold transition-colors">Sellers</Link></li>
             </ul>
           </div>
           
           <div>
             <h4 className="font-bold mb-4 text-gold">Services</h4>
             <ul className="space-y-2 text-sm">
-              <li><a href="#" className="text-luxury-text/70 hover:text-gold transition-colors">Browse Auctions</a></li>
+              <li><Link to="/#auctions" className="text-luxury-text/70 hover:text-gold transition-colors">Browse Auctions</Link></li>
               <li><a href="#" className="text-luxury-text/70 hover:text-gold transition-colors">Valuation Services</a></li>
               <li><a href="#" className="text-luxury-text/70 hover:text-gold transition-colors">Sell With Us</a></li>
               <li><a href="#" className="text-luxury-text/70 hover:text-gold transition-colors">Authentication</a></li>

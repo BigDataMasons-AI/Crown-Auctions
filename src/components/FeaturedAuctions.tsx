@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuctionCard } from "./AuctionCard";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import diamondRing from "@/assets/auction-diamond-ring.jpg";
-import swissWatch from "@/assets/auction-swiss-watch.jpg";
-import necklace from "@/assets/auction-necklace.jpg";
-import rolex from "@/assets/auction-rolex.jpg";
-import earrings from "@/assets/auction-earrings.jpg";
-import looseDiamond from "@/assets/auction-loose-diamond.jpg";
+import { supabase } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
 
-type Category = "all" | "jewellery" | "watches" | "diamonds";
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  display_order: number;
+}
 
 interface AuctionItem {
   id: string;
@@ -17,82 +19,165 @@ interface AuctionItem {
   startingPrice: number;
   currentBid: number;
   endTime: Date;
-  category: "jewellery" | "watches" | "diamonds";
+  category: string; // Use slug from database
   bids: number;
   status?: string;
 }
 
 export const FeaturedAuctions = () => {
-  const [selectedCategory, setSelectedCategory] = useState<Category>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [auctions, setAuctions] = useState<AuctionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
 
-  const auctions: AuctionItem[] = [
-    {
-      id: "1",
-      title: "Platinum Diamond Solitaire Ring - 2.5 Carat",
-      image: diamondRing,
-      startingPrice: 8500,
-      currentBid: 12800,
-      endTime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 5 * 60 * 60 * 1000),
-      category: "jewellery",
-      bids: 24,
-      status: "active",
-    },
-    {
-      id: "2",
-      title: "Swiss Chronograph Watch - Black Leather Strap",
-      image: swissWatch,
-      startingPrice: 3200,
-      currentBid: 4950,
-      endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000),
-      category: "watches",
-      bids: 18,
-      status: "active",
-    },
-    {
-      id: "3",
-      title: "18K Gold Diamond Pendant Necklace",
-      image: necklace,
-      startingPrice: 2800,
-      currentBid: 3650,
-      endTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000),
-      category: "jewellery",
-      bids: 15,
-      status: "paused",
-    },
-    {
-      id: "4",
-      title: "Vintage Rolex Datejust - 18K Gold",
-      image: rolex,
-      startingPrice: 15000,
-      currentBid: 22500,
-      endTime: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000),
-      category: "watches",
-      bids: 42,
-      status: "active",
-    },
-    {
-      id: "5",
-      title: "Sapphire & Diamond Drop Earrings - White Gold",
-      image: earrings,
-      startingPrice: 5500,
-      currentBid: 7200,
-      endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000),
-      category: "jewellery",
-      bids: 28,
-      status: "active",
-    },
-    {
-      id: "6",
-      title: "GIA Certified 3.2 Carat Loose Diamond - VS1",
-      image: looseDiamond,
-      startingPrice: 18000,
-      currentBid: 24800,
-      endTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000),
-      category: "diamonds",
-      bids: 31,
-      status: "active",
-    },
-  ];
+  useEffect(() => {
+    fetchCategories();
+    fetchApprovedAuctions();
+    
+    // Set up real-time subscription for new approvals
+    const channel = supabase
+      .channel('featured-auctions')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'auctions',
+          filter: 'approval_status=eq.approved'
+        },
+        () => {
+          fetchApprovedAuctions();
+        }
+      )
+      .subscribe();
+
+    // Set up real-time subscription for category changes
+    const categoriesChannel = supabase
+      .channel('featured-categories')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'categories'
+        },
+        () => {
+          fetchCategories();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(categoriesChannel);
+    };
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      setCategoriesLoading(true);
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      setCategories([]);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  const fetchApprovedAuctions = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch approved and active auctions
+      const { data: auctionsData, error: auctionsError } = await supabase
+        .from('auctions')
+        .select('*')
+        .eq('approval_status', 'approved')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+
+      if (auctionsError) throw auctionsError;
+
+      if (!auctionsData || auctionsData.length === 0) {
+        setAuctions([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch bid counts for each auction
+      const auctionIds = auctionsData.map(a => a.id);
+      const { data: bidsData, error: bidsError } = await supabase
+        .from('bids')
+        .select('auction_id, bid_amount')
+        .in('auction_id', auctionIds)
+        .eq('status', 'active');
+
+      if (bidsError) {
+        console.error('Error fetching bids:', bidsError);
+      }
+
+      // Calculate bid counts and current highest bid per auction
+      const bidCounts = new Map<string, number>();
+      const highestBids = new Map<string, number>();
+
+      bidsData?.forEach(bid => {
+        const count = bidCounts.get(bid.auction_id) || 0;
+        bidCounts.set(bid.auction_id, count + 1);
+        
+        const currentHighest = highestBids.get(bid.auction_id) || 0;
+        if (bid.bid_amount > currentHighest) {
+          highestBids.set(bid.auction_id, bid.bid_amount);
+        }
+      });
+
+      // Map database data to component format
+      // Filter out ended auctions (end_time in the past)
+      const now = new Date();
+      const mappedAuctions: AuctionItem[] = auctionsData
+        .filter(auction => {
+          const endTime = new Date(auction.end_time);
+          return endTime > now; // Only show auctions that haven't ended
+        })
+        .map(auction => {
+          // Use category slug directly from database
+          const categorySlug = auction.category?.toLowerCase() || '';
+
+          const bidCount = bidCounts.get(auction.id) || 0;
+          const highestBid = highestBids.get(auction.id) || auction.current_bid || auction.starting_price;
+          const imageUrl = auction.image_urls && auction.image_urls.length > 0 
+            ? auction.image_urls[0] 
+            : '/placeholder.svg';
+
+          return {
+            id: auction.id,
+            title: auction.title,
+            image: imageUrl,
+            startingPrice: auction.starting_price,
+            currentBid: highestBid,
+            endTime: new Date(auction.end_time),
+            category: categorySlug, // Use slug from database
+            bids: bidCount,
+            status: auction.status || 'active',
+          };
+        });
+
+      setAuctions(mappedAuctions);
+    } catch (error) {
+      console.error('Error fetching approved auctions:', error);
+      setAuctions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredAuctions =
     selectedCategory === "all"
@@ -113,36 +198,50 @@ export const FeaturedAuctions = () => {
         <Tabs
           defaultValue="all"
           className="mb-12"
-          onValueChange={(value) => setSelectedCategory(value as Category)}
+          onValueChange={(value) => setSelectedCategory(value)}
         >
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-4 h-12">
+          <TabsList 
+            className="w-full max-w-2xl mx-auto h-12 flex flex-wrap justify-center gap-1"
+            style={{ 
+              gridTemplateColumns: `repeat(${categories.length + 1}, minmax(0, 1fr))`,
+              display: 'grid'
+            }}
+          >
             <TabsTrigger value="all" className="text-sm font-medium">
               All
             </TabsTrigger>
-            <TabsTrigger value="jewellery" className="text-sm font-medium">
-              Jewellery
-            </TabsTrigger>
-            <TabsTrigger value="watches" className="text-sm font-medium">
-              Watches
-            </TabsTrigger>
-            <TabsTrigger value="diamonds" className="text-sm font-medium">
-              Diamonds
-            </TabsTrigger>
+            {categories.map((category) => (
+              <TabsTrigger 
+                key={category.id} 
+                value={category.slug} 
+                className="text-sm font-medium"
+              >
+                {category.name}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
-          {filteredAuctions.map((auction) => (
-            <AuctionCard key={auction.id} {...auction} />
-          ))}
-        </div>
-
-        {filteredAuctions.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-lg">
-              No auctions found in this category. Check back soon!
-            </p>
+        {(loading || categoriesLoading) ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-gold" />
           </div>
+        ) : (
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade-in">
+              {filteredAuctions.map((auction) => (
+                <AuctionCard key={auction.id} {...auction} />
+              ))}
+            </div>
+
+            {filteredAuctions.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg">
+                  No auctions found in this category. Check back soon!
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>

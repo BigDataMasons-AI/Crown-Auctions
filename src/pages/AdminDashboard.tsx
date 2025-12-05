@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Loader2, Check, X, Clock, Eye, Play, Pause } from 'lucide-react';
+import { Loader2, Check, X, Clock, Eye, Play, Pause, Tag } from 'lucide-react';
+import { CategoriesManagement } from '@/components/CategoriesManagement';
 
 interface Auction {
   id: string;
@@ -587,7 +588,7 @@ export default function AdminDashboard() {
           </div>
 
           <Tabs defaultValue="pending" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="pending">
                 Pending ({pendingAuctions.length})
               </TabsTrigger>
@@ -596,6 +597,10 @@ export default function AdminDashboard() {
               </TabsTrigger>
               <TabsTrigger value="rejected">
                 Rejected ({rejectedAuctions.length})
+              </TabsTrigger>
+              <TabsTrigger value="categories">
+                <Tag className="h-4 w-4 mr-2" />
+                Categories
               </TabsTrigger>
             </TabsList>
 
@@ -648,6 +653,10 @@ export default function AdminDashboard() {
                   ))
                 )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="categories" className="mt-6">
+              <CategoriesManagement />
             </TabsContent>
           </Tabs>
         </div>

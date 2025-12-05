@@ -33,6 +33,15 @@ interface CertField {
   issuer: string;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  display_order: number;
+  is_active: boolean;
+}
+
 export default function SubmitAuction() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -40,6 +49,8 @@ export default function SubmitAuction() {
   const [submitting, setSubmitting] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [specifications, setSpecifications] = useState<SpecField[]>([
     { id: '1', label: '', value: '' }
   ]);
@@ -63,6 +74,38 @@ export default function SubmitAuction() {
       navigate('/auth');
     }
   }, [user, authLoading, navigate]);
+
+  // Fetch active categories from database
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        const { data, error } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('is_active', true)
+          .order('display_order', { ascending: true })
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+        setCategories(data || []);
+      } catch (error: any) {
+        console.error('Error fetching categories:', error);
+        toast.error('Failed to load categories');
+        // Fallback to default categories if fetch fails
+        setCategories([
+          { id: '1', name: 'Watches', slug: 'watches', description: null, display_order: 1, is_active: true },
+          { id: '2', name: 'Jewelry', slug: 'jewelry', description: null, display_order: 2, is_active: true },
+          { id: '3', name: 'Diamonds', slug: 'diamonds', description: null, display_order: 3, is_active: true },
+          { id: '4', name: 'Luxury Goods', slug: 'luxury-goods', description: null, display_order: 4, is_active: true },
+        ]);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   // Check for pre-filled data from URL parameters
   useEffect(() => {
@@ -158,28 +201,59 @@ export default function SubmitAuction() {
     ));
   };
 
+  const sanitizeFileName = (fileName: string): string => {
+    // Remove spaces and special characters, keep only alphanumeric, dots, hyphens, and underscores
+    return fileName
+      .replace(/\s+/g, '_') // Replace spaces with underscores
+      .replace(/[^a-zA-Z0-9._-]/g, '') // Remove special characters except . _ -
+      .toLowerCase();
+  };
+
   const uploadImages = async (auctionId: string): Promise<string[]> => {
     const uploadedUrls: string[] = [];
 
+    if (!user) {
+      throw new Error('User must be authenticated to upload images');
+    }
+
     for (let i = 0; i < images.length; i++) {
       const file = images[i];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user!.id}/${auctionId}/${Date.now()}_${i}.${fileExt}`;
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
 
+      // Sanitize the original file name and create a clean path
+      const sanitizedOriginalName = sanitizeFileName(file.name.replace(/\.[^/.]+$/, '')); // Remove extension
+      const fileName = `${user.id}/${auctionId}/${Date.now()}_${i}_${sanitizedOriginalName}.${fileExt}`;
+
+      try {
       const { data, error } = await supabase.storage
         .from('auction-images')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false
+            upsert: false,
+            contentType: file.type || `image/${fileExt}`
         });
 
-      if (error) throw error;
+        if (error) {
+          console.error('Upload error for file:', file.name, error);
+          throw error;
+        }
 
       const { data: { publicUrl } } = supabase.storage
         .from('auction-images')
         .getPublicUrl(data.path);
 
       uploadedUrls.push(publicUrl);
+      } catch (error: any) {
+        console.error(`Failed to upload image ${i + 1}:`, error);
+        // If it's a CORS error, provide helpful message
+        if (error.message?.includes('CORS') || error.message?.includes('fetch')) {
+          throw new Error(
+            'Image upload failed due to CORS policy. Please check Supabase Storage CORS settings. ' +
+            'Go to Supabase Dashboard > Storage > Settings and ensure your origin is allowed.'
+          );
+        }
+        throw error;
+      }
     }
 
     return uploadedUrls;
@@ -314,17 +388,29 @@ export default function SubmitAuction() {
 
                   <div className="space-y-2">
                     <Label htmlFor="category">Category *</Label>
+                    {loadingCategories ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">Loading categories...</span>
+                      </div>
+                    ) : (
                     <Select name="category" defaultValue={prefilledData.category || ''} required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="watches">Watches</SelectItem>
-                        <SelectItem value="jewelry">Jewelry</SelectItem>
-                        <SelectItem value="diamonds">Diamonds</SelectItem>
-                        <SelectItem value="luxury-goods">Luxury Goods</SelectItem>
+                          {categories.length === 0 ? (
+                            <SelectItem value="" disabled>No categories available</SelectItem>
+                          ) : (
+                            categories.map((category) => (
+                              <SelectItem key={category.id} value={category.slug}>
+                                {category.name}
+                              </SelectItem>
+                            ))
+                          )}
                       </SelectContent>
                     </Select>
+                    )}
                   </div>
 
                   <div className="space-y-2">

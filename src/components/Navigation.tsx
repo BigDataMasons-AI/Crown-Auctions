@@ -18,21 +18,21 @@ export const Navigation = () => {
           </Link>
           
           <div className="hidden md:flex items-center space-x-8">
-            <a href="#home" className="text-sm font-medium hover:text-gold transition-colors">
+            <Link to="/#home" className="text-sm font-medium hover:text-gold transition-colors">
               HOME
-            </a>
-            <a href="#about" className="text-sm font-medium hover:text-gold transition-colors">
+            </Link>
+            <Link to="/#about" className="text-sm font-medium hover:text-gold transition-colors">
               ABOUT
-            </a>
-            <a href="#buyers" className="text-sm font-medium hover:text-gold transition-colors">
+            </Link>
+            <Link to="/#buyers" className="text-sm font-medium hover:text-gold transition-colors">
               BUYERS
-            </a>
-            <a href="#sellers" className="text-sm font-medium hover:text-gold transition-colors">
+            </Link>
+            <Link to="/#sellers" className="text-sm font-medium hover:text-gold transition-colors">
               SELLERS
-            </a>
-            <a href="#auctions" className="text-sm font-medium hover:text-gold transition-colors">
+            </Link>
+            <Link to="/#auctions" className="text-sm font-medium hover:text-gold transition-colors">
               BROWSE AUCTIONS
-            </a>
+            </Link>
             {user ? (
               <div className="flex items-center gap-2 ml-4">
                 <Button variant="outline" size="sm" asChild>

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock, Shield, Award, ChevronLeft, AlertCircle } from "lucide-react";
+import { Clock, Shield, Award, ChevronLeft, AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuctionBids } from "@/hooks/useAuctionBids";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,12 +17,6 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { BidHistoryChart } from "@/components/BidHistoryChart";
-import diamondRing from "@/assets/auction-diamond-ring.jpg";
-import swissWatch from "@/assets/auction-swiss-watch.jpg";
-import necklace from "@/assets/auction-necklace.jpg";
-import rolex from "@/assets/auction-rolex.jpg";
-import earrings from "@/assets/auction-earrings.jpg";
-import looseDiamond from "@/assets/auction-loose-diamond.jpg";
 
 interface AuctionItem {
   id: string;
@@ -39,7 +33,8 @@ interface AuctionItem {
   minimumIncrement: number;
 }
 
-const auctionData: Record<string, AuctionItem> = {
+// Removed hardcoded auctionData - now fetching from database
+/* const auctionData: Record<string, AuctionItem> = {
   "1": {
     id: "1",
     title: "Platinum Diamond Solitaire Ring - 2.5 Carat",
@@ -210,7 +205,7 @@ const auctionData: Record<string, AuctionItem> = {
     ],
     minimumIncrement: 500,
   },
-};
+}; */
 
 export default function AuctionDetail() {
   const { id } = useParams();
@@ -222,34 +217,77 @@ export default function AuctionDetail() {
   const [bidAmount, setBidAmount] = useState("");
   const [auctionStatus, setAuctionStatus] = useState<string | null>(null);
   const [auctionApprovalStatus, setAuctionApprovalStatus] = useState<string | null>(null);
+  const [auction, setAuction] = useState<AuctionItem | null>(null);
+  const [loading, setLoading] = useState(true);
   const { bids, loading: bidsLoading, currentHighestBid, placeBid } = useAuctionBids(id);
   const { trackAuction } = useBidNotifications();
 
-  const auction = id ? auctionData[id] : null;
-
-  // Fetch auction status from database
+  // Fetch auction data from database
   useEffect(() => {
-    const fetchAuctionStatus = async () => {
-      if (!id) return;
+    const fetchAuction = async () => {
+      if (!id) {
+        setLoading(false);
+        return;
+      }
       
       try {
-        const { data, error } = await supabase
+        setLoading(true);
+        
+        // Fetch auction data
+        const { data: auctionData, error: auctionError } = await supabase
           .from('auctions')
-          .select('status, approval_status')
+          .select('*')
           .eq('id', id)
           .maybeSingle();
 
-        if (error) throw error;
-        if (data) {
-          setAuctionStatus(data.status);
-          setAuctionApprovalStatus(data.approval_status);
+        if (auctionError) throw auctionError;
+        
+        if (!auctionData) {
+          setAuction(null);
+          setLoading(false);
+          return;
         }
+
+        setAuctionStatus(auctionData.status);
+        setAuctionApprovalStatus(auctionData.approval_status);
+
+        // Map database auction to component format
+        const images = auctionData.image_urls && auctionData.image_urls.length > 0 
+          ? auctionData.image_urls 
+          : ['/placeholder.svg'];
+
+        const specifications = auctionData.specifications || [];
+        const certificates = auctionData.certificates || [];
+
+        const mappedAuction: AuctionItem = {
+          id: auctionData.id,
+          title: auctionData.title,
+          images: images,
+          startingPrice: auctionData.starting_price,
+          currentBid: auctionData.current_bid || auctionData.starting_price,
+          endTime: new Date(auctionData.end_time),
+          category: auctionData.category || 'Uncategorized',
+          description: auctionData.description || '',
+          specifications: specifications,
+          certificates: certificates.map((cert: any) => ({
+            name: cert.name || '',
+            issuer: cert.issuer || '',
+            date: cert.date || new Date().toISOString().split('T')[0]
+          })),
+          bidHistory: [], // Will be populated by useAuctionBids
+          minimumIncrement: auctionData.minimum_increment || 100,
+        };
+
+        setAuction(mappedAuction);
       } catch (error) {
-        console.error('Error fetching auction status:', error);
+        console.error('Error fetching auction:', error);
+        setAuction(null);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchAuctionStatus();
+    fetchAuction();
 
     // Set up real-time subscription for status changes
     const channel = supabase
@@ -277,7 +315,22 @@ export default function AuctionDetail() {
   }, [id]);
   
   // Update current bid based on database bids
-  const displayCurrentBid = currentHighestBid || auction?.currentBid || 0;
+  const displayCurrentBid = currentHighestBid || auction?.currentBid || auction?.startingPrice || 0;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navigation />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-gold mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading auction details...</p>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!auction) {
     return (
@@ -286,6 +339,7 @@ export default function AuctionDetail() {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <h1 className="text-4xl font-bold mb-4">Auction Not Found</h1>
+            <p className="text-muted-foreground mb-6">The auction you're looking for doesn't exist or has been removed.</p>
             <Button onClick={() => navigate("/")} variant="gold">
               Return to Home
             </Button>
@@ -409,7 +463,12 @@ export default function AuctionDetail() {
                   )}
                   <div className="flex items-center gap-2 text-lg pt-2">
                     <Clock className="w-5 h-5 text-gold" />
-                    <span className="font-medium">Ends in 2d 5h 23m</span>
+                    <span className="font-medium">
+                      {auction.endTime > new Date() 
+                        ? `Ends ${formatDistanceToNow(auction.endTime, { addSuffix: true })}`
+                        : 'Auction Ended'
+                      }
+                    </span>
                   </div>
                 </CardContent>
               </Card>
