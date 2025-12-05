@@ -24,12 +24,6 @@ export const Navigation = () => {
             <Link to="/#about" className="text-sm font-medium hover:text-gold transition-colors">
               ABOUT
             </Link>
-            <Link to="/#buyers" className="text-sm font-medium hover:text-gold transition-colors">
-              BUYERS
-            </Link>
-            <Link to="/#sellers" className="text-sm font-medium hover:text-gold transition-colors">
-              SELLERS
-            </Link>
             <Link to="/#auctions" className="text-sm font-medium hover:text-gold transition-colors">
               BROWSE AUCTIONS
             </Link>
