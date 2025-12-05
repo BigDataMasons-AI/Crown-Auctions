@@ -418,13 +418,19 @@ export default function AdminDashboard() {
               <p>Submitted: {new Date(auction.created_at).toLocaleDateString()}</p>
             </div>
           </div>
-          {auction.image_urls && auction.image_urls.length > 0 && (
-            <img 
-              src={auction.image_urls[0]} 
-              alt={auction.title}
-              className="w-24 h-24 object-cover rounded-lg"
-            />
-          )}
+          {auction.image_urls && auction.image_urls.length > 0 && (() => {
+            const firstImage = auction.image_urls[0];
+            const imageUrl = firstImage.startsWith('http://') || firstImage.startsWith('https://')
+              ? firstImage
+              : supabase.storage.from('auction-images').getPublicUrl(firstImage).data.publicUrl;
+            return (
+              <img 
+                src={imageUrl} 
+                alt={auction.title}
+                className="w-24 h-24 object-cover rounded-lg"
+              />
+            );
+          })()}
         </div>
       </CardHeader>
       <CardContent>

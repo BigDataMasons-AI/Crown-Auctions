@@ -77,24 +77,44 @@ export default function Dashboard() {
             const userHighestBid = Math.max(...userBidsForAuction.map(b => b.bid_amount));
             const userLatestBid = userBidsForAuction[0];
             
-            // Get current highest bid for this auction
-            const { data: highestBidData } = await supabase
-              .from('bids')
-              .select('bid_amount, user_id')
-              .eq('auction_id', auctionId)
-              .eq('status', 'active')
-              .order('bid_amount', { ascending: false })
-              .limit(1)
-              .single();
+            // Fetch auction details
+            const { data: auctionData, error: auctionError } = await supabase
+              .from('auctions')
+              .select('id, title, image_urls, category, status, approval_status')
+              .eq('id', auctionId)
+              .maybeSingle();
             
-            const isWinning = highestBidData?.user_id === user!.id;
+            if (auctionError) {
+              console.error(`Error fetching auction ${auctionId}:`, auctionError);
+            }
+            
+            // Get current highest bid for this auction (only if auction exists)
+            let highestBidData = null;
+            let isWinning = false;
+            
+            if (auctionData) {
+              const { data: highestBid } = await supabase
+                .from('bids')
+                .select('bid_amount, user_id')
+                .eq('auction_id', auctionId)
+                .eq('status', 'active')
+                .order('bid_amount', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              
+              highestBidData = highestBid;
+              isWinning = highestBidData?.user_id === user!.id;
+            } else {
+              console.warn(`Auction ${auctionId} not found in database - bid may be orphaned`);
+            }
             
             return {
               ...userLatestBid,
               userHighestBid,
               currentHighestBid: highestBidData?.bid_amount || userHighestBid,
               isWinning,
-              totalBids: userBidsForAuction.length
+              totalBids: userBidsForAuction.length,
+              auction: auctionData || null
             };
           })
         );
@@ -561,40 +581,85 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 ) : (
-                  bids.map((bid: any) => (
-                    <Card key={bid.id} className={bid.isWinning ? 'border-gold/50' : 'border-destructive/30'}>
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold">Auction #{bid.auction_id}</h3>
-                              <Badge 
-                                variant={bid.isWinning ? 'default' : 'destructive'}
-                                className={bid.isWinning ? 'bg-gold hover:bg-gold/90' : ''}
-                              >
-                                {bid.isWinning ? '🏆 Winning' : '⚠️ Outbid'}
-                              </Badge>
+                  bids.map((bid: any) => {
+                    const auction = bid.auction;
+                    const auctionNotFound = !auction;
+                    
+                    // Handle image URL - check if it's already a full URL or needs storage path conversion
+                    let imageUrl = '/placeholder.svg';
+                    if (auction?.image_urls && auction.image_urls.length > 0) {
+                      const firstImage = auction.image_urls[0];
+                      if (firstImage.startsWith('http://') || firstImage.startsWith('https://')) {
+                        imageUrl = firstImage;
+                      } else {
+                        imageUrl = supabase.storage.from('auction-images').getPublicUrl(firstImage).data.publicUrl;
+                      }
+                    }
+                    
+                    return (
+                      <Card key={bid.id} className={bid.isWinning ? 'border-gold/50' : 'border-destructive/30'}>
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between gap-4">
+                            {auction && (
+                              <img 
+                                src={imageUrl} 
+                                alt={auction.title || 'Auction'}
+                                className="w-24 h-24 object-cover rounded-lg"
+                              />
+                            )}
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-semibold">
+                                  {auction?.title || `Auction #${bid.auction_id}`}
+                                </h3>
+                                {auctionNotFound ? (
+                                  <Badge variant="secondary" className="bg-orange-500/10 text-orange-700 border-orange-500/20">
+                                    Auction Unavailable
+                                  </Badge>
+                                ) : (
+                                  <>
+                                    <Badge 
+                                      variant={bid.isWinning ? 'default' : 'destructive'}
+                                      className={bid.isWinning ? 'bg-gold hover:bg-gold/90' : ''}
+                                    >
+                                      {bid.isWinning ? '🏆 Winning' : '⚠️ Outbid'}
+                                    </Badge>
+                                    {auction?.category && (
+                                      <Badge variant="outline">{auction.category}</Badge>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                              <div className="space-y-1 text-sm text-muted-foreground">
+                                {auctionNotFound && (
+                                  <p className="text-orange-600 font-medium mb-2">
+                                    ⚠️ This auction is no longer available
+                                  </p>
+                                )}
+                                <p>Your highest bid: ${Number(bid.userHighestBid).toLocaleString()}</p>
+                                {!auctionNotFound && (
+                                  <p>Current highest: ${Number(bid.currentHighestBid).toLocaleString()}</p>
+                                )}
+                                <p>Last bid: {new Date(bid.bid_time).toLocaleString()}</p>
+                                {bid.totalBids > 1 && (
+                                  <p className="text-xs">{bid.totalBids} bids placed</p>
+                                )}
+                              </div>
                             </div>
-                            <div className="space-y-1 text-sm text-muted-foreground">
-                              <p>Your highest bid: ${Number(bid.userHighestBid).toLocaleString()}</p>
-                              <p>Current highest: ${Number(bid.currentHighestBid).toLocaleString()}</p>
-                              <p>Last bid: {new Date(bid.bid_time).toLocaleString()}</p>
-                              {bid.totalBids > 1 && (
-                                <p className="text-xs">{bid.totalBids} bids placed</p>
-                              )}
-                            </div>
+                            {!auctionNotFound && (
+                              <div className="flex flex-col gap-2">
+                                <Button asChild size="sm" variant={bid.isWinning ? 'outline' : 'default'}>
+                                  <Link to={`/auction/${bid.auction_id}`}>
+                                    {bid.isWinning ? 'View' : 'Rebid Now'}
+                                  </Link>
+                                </Button>
+                              </div>
+                            )}
                           </div>
-                          <div className="flex flex-col gap-2">
-                            <Button asChild size="sm" variant={bid.isWinning ? 'outline' : 'default'}>
-                              <Link to={`/auction/${bid.auction_id}`}>
-                                {bid.isWinning ? 'View' : 'Rebid Now'}
-                              </Link>
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
+                        </CardContent>
+                      </Card>
+                    );
+                  })
                 )}
               </div>
             </TabsContent>
