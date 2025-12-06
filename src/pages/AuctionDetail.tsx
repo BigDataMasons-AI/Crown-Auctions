@@ -14,6 +14,7 @@ import { useAuctionBids } from "@/hooks/useAuctionBids";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBidNotifications } from "@/contexts/BidNotificationContext";
 import { useAdmin } from "@/hooks/useAdmin";
+import { useCategoryName } from "@/hooks/useCategoryName";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { BidHistoryChart } from "@/components/BidHistoryChart";
@@ -213,6 +214,7 @@ export default function AuctionDetail() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { isAdmin } = useAdmin();
+  const { getCategoryName } = useCategoryName();
   const [selectedImage, setSelectedImage] = useState(0);
   const [bidAmount, setBidAmount] = useState("");
   const [auctionStatus, setAuctionStatus] = useState<string | null>(null);
@@ -448,7 +450,7 @@ export default function AuctionDetail() {
             {/* Auction Details & Bidding */}
             <div className="space-y-6">
               <div>
-                <Badge className="mb-3">{auction.category}</Badge>
+                <Badge className="mb-3">{getCategoryName(auction.category)}</Badge>
                 <h1 className="text-4xl font-bold mb-4">{auction.title}</h1>
                 <p className="text-muted-foreground text-lg">{auction.description}</p>
               </div>

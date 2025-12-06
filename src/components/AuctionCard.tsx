@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock, Heart } from "lucide-react";
 import { useSavedAuctions } from "@/hooks/useSavedAuctions";
+import { useCategoryName } from "@/hooks/useCategoryName";
 import { cn } from "@/lib/utils";
 
 interface AuctionCardProps {
@@ -33,6 +34,7 @@ export const AuctionCard = ({
   const navigate = useNavigate();
   const [timeLeft, setTimeLeft] = useState("");
   const { toggleSaveAuction, isSaved } = useSavedAuctions();
+  const { getCategoryName } = useCategoryName();
   
   const handleSaveClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -105,7 +107,7 @@ export const AuctionCard = ({
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <Badge variant="secondary" className="text-xs font-medium">
-            {category}
+            {getCategoryName(category)}
           </Badge>
           {status === 'paused' && (
             <Badge variant="secondary" className="text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">

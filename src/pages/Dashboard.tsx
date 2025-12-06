@@ -13,10 +13,12 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Loader2, Heart, Gavel, FileText, Clock, CheckCircle, XCircle, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useCategoryName } from '@/hooks/useCategoryName';
 
 export default function Dashboard() {
   const { user, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { getCategoryName } = useCategoryName();
   const [profile, setProfile] = useState<any>(null);
   const [savedAuctions, setSavedAuctions] = useState<any[]>([]);
   const [bids, setBids] = useState<any[]>([]);
@@ -382,7 +384,7 @@ export default function Dashboard() {
                                     <div className="flex items-start justify-between gap-4 mb-2">
                                        <div>
                                          <h4 className="font-semibold text-lg">{submission.title}</h4>
-                                         <p className="text-sm text-muted-foreground">{submission.category}</p>
+                                         <p className="text-sm text-muted-foreground">{getCategoryName(submission.category)}</p>
                                        </div>
                                        <Badge variant="secondary" className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20">
                                          <Clock className="h-3 w-3 mr-1" />
@@ -411,25 +413,32 @@ export default function Dashboard() {
                                          />
                                        </div>
                                      )}
-                                     <Button
-                                      variant="outline" 
-                                      size="sm" 
-                                      className="mt-3 text-destructive hover:text-destructive"
-                                      onClick={() => handleWithdrawSubmission(submission)}
-                                      disabled={withdrawing === submission.id}
-                                    >
-                                      {withdrawing === submission.id ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                          Withdrawing...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Trash2 className="h-4 w-4 mr-2" />
-                                          Withdraw Submission
-                                        </>
-                                      )}
-                                    </Button>
+                                     <div className="flex gap-2 mt-3">
+                                       <Button asChild variant="outline" size="sm">
+                                         <Link to={`/submit-auction/${submission.id}`}>
+                                           Edit
+                                         </Link>
+                                       </Button>
+                                       <Button
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="text-destructive hover:text-destructive"
+                                        onClick={() => handleWithdrawSubmission(submission)}
+                                        disabled={withdrawing === submission.id}
+                                      >
+                                        {withdrawing === submission.id ? (
+                                          <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Withdrawing...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Trash2 className="h-4 w-4 mr-2" />
+                                            Withdraw
+                                          </>
+                                        )}
+                                      </Button>
+                                     </div>
                                   </div>
                                 </div>
                               </CardContent>
@@ -461,7 +470,7 @@ export default function Dashboard() {
                                      <div className="flex items-start justify-between gap-4 mb-2">
                                        <div>
                                          <h4 className="font-semibold text-lg">{submission.title}</h4>
-                                         <p className="text-sm text-muted-foreground">{submission.category}</p>
+                                         <p className="text-sm text-muted-foreground">{getCategoryName(submission.category)}</p>
                                        </div>
                                        <div className="flex gap-2">
                                          <Badge className="bg-gold hover:bg-gold/90">
@@ -607,7 +616,7 @@ export default function Dashboard() {
                                   </Badge>
                                 ) : (
                                   auction?.category && (
-                                    <Badge variant="outline">{auction.category}</Badge>
+                                    <Badge variant="outline">{getCategoryName(auction.category)}</Badge>
                                   )
                                 )}
                               </div>
@@ -713,7 +722,7 @@ export default function Dashboard() {
                                       {bid.isWinning ? '🏆 Winning' : '⚠️ Outbid'}
                                     </Badge>
                                     {auction?.category && (
-                                      <Badge variant="outline">{auction.category}</Badge>
+                                      <Badge variant="outline">{getCategoryName(auction.category)}</Badge>
                                     )}
                                   </>
                                 )}

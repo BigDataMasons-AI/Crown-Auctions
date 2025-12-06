@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Navigation } from '@/components/Navigation';
@@ -45,12 +45,17 @@ interface Category {
 export default function SubmitAuction() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { id: auctionId } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
+  const [loadingAuction, setLoadingAuction] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [specifications, setSpecifications] = useState<SpecField[]>([
     { id: '1', label: '', value: '' }
   ]);
@@ -66,6 +71,7 @@ export default function SubmitAuction() {
     startingPrice?: string;
     minimumIncrement?: string;
     originalId?: string;
+    endTime?: string;
   }>({});
 
   useEffect(() => {
@@ -74,6 +80,88 @@ export default function SubmitAuction() {
       navigate('/auth');
     }
   }, [user, authLoading, navigate]);
+
+  // Load auction data if editing
+  useEffect(() => {
+    const loadAuctionForEdit = async () => {
+      if (!auctionId || !user) return;
+
+      setLoadingAuction(true);
+      try {
+        const { data: auction, error } = await supabase
+          .from('auctions')
+          .select('*')
+          .eq('id', auctionId)
+          .eq('submitted_by', user.id)
+          .eq('approval_status', 'pending')
+          .single();
+
+        if (error) throw error;
+
+        if (!auction) {
+          toast.error('Auction not found or cannot be edited');
+          navigate('/dashboard');
+          return;
+        }
+
+        setIsEditing(true);
+        const imageUrls = auction.image_urls || [];
+        setExistingImageUrls(imageUrls);
+        
+        // Convert storage paths to public URLs for preview
+        const previewUrls = imageUrls.map((url: string) => {
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            return url;
+          }
+          return supabase.storage.from('auction-images').getPublicUrl(url).data.publicUrl;
+        });
+        setImagePreviews(previewUrls);
+
+        // Set form values
+        setPrefilledData({
+          title: auction.title,
+          category: auction.category,
+          description: auction.description,
+          startingPrice: auction.starting_price.toString(),
+          minimumIncrement: auction.minimum_increment?.toString() || '100',
+          endTime: auction.end_time,
+        });
+        
+        // Set selected category for controlled Select component
+        setSelectedCategory(auction.category || '');
+
+        // Set specifications
+        if (auction.specifications && Array.isArray(auction.specifications) && auction.specifications.length > 0) {
+          setSpecifications(
+            auction.specifications.map((spec: any, index: number) => ({
+              id: String(index + 1),
+              label: spec.label || '',
+              value: spec.value || '',
+            }))
+          );
+        }
+
+        // Set certificates
+        if (auction.certificates && Array.isArray(auction.certificates) && auction.certificates.length > 0) {
+          setCertificates(
+            auction.certificates.map((cert: any, index: number) => ({
+              id: String(index + 1),
+              name: cert.name || '',
+              issuer: cert.issuer || '',
+            }))
+          );
+        }
+      } catch (error: any) {
+        console.error('Error loading auction:', error);
+        toast.error('Failed to load auction data');
+        navigate('/dashboard');
+      } finally {
+        setLoadingAuction(false);
+      }
+    };
+
+    loadAuctionForEdit();
+  }, [auctionId, user, navigate]);
 
   // Fetch active categories from database
   useEffect(() => {
@@ -126,6 +214,11 @@ export default function SubmitAuction() {
         minimumIncrement: minimumIncrement || undefined,
         originalId: originalId || undefined,
       });
+      
+      // Set selected category for controlled Select component
+      if (category) {
+        setSelectedCategory(category);
+      }
 
       if (title || category || description) {
         toast.info('Form pre-filled with your previous submission data. Feel free to make changes!', {
@@ -169,8 +262,16 @@ export default function SubmitAuction() {
   };
 
   const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
-    setImagePreviews(imagePreviews.filter((_, i) => i !== index));
+    if (isEditing && index < existingImageUrls.length) {
+      // Remove from existing images
+      setExistingImageUrls(existingImageUrls.filter((_, i) => i !== index));
+      setImagePreviews(imagePreviews.filter((_, i) => i !== index));
+    } else {
+      // Remove from new images
+      const newIndex = index - existingImageUrls.length;
+      setImages(images.filter((_, i) => i !== newIndex));
+      setImagePreviews(imagePreviews.filter((_, i) => i !== index));
+    }
   };
 
   const addSpecification = () => {
@@ -269,7 +370,7 @@ export default function SubmitAuction() {
       // Validate form data
       const validationData = {
         title: formData.get('title') as string,
-        category: formData.get('category') as string,
+        category: selectedCategory || (formData.get('category') as string),
         description: formData.get('description') as string,
         startingPrice: parseFloat(formData.get('startingPrice') as string),
         endTime: formData.get('endTime') as string,
@@ -284,19 +385,31 @@ export default function SubmitAuction() {
         return;
       }
 
-      // Validate images
-      if (images.length === 0) {
+      // Validate images - allow existing images if editing
+      if (images.length === 0 && (!isEditing || existingImageUrls.length === 0)) {
         toast.error('Please upload at least one image');
         setSubmitting(false);
         return;
       }
 
-      // Generate auction ID
-      const auctionId = `auction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // Upload images
-      toast.info('Uploading images...');
-      const imageUrls = await uploadImages(auctionId);
+      let imageUrls: string[] = [];
+      
+      if (isEditing && auctionId) {
+        // When editing, use existing images if no new images uploaded
+        if (images.length > 0) {
+          toast.info('Uploading new images...');
+          imageUrls = await uploadImages(auctionId);
+        } else {
+          imageUrls = existingImageUrls;
+        }
+      } else {
+        // Generate auction ID for new submission
+        const newAuctionId = `auction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Upload images
+        toast.info('Uploading images...');
+        imageUrls = await uploadImages(newAuctionId);
+      }
 
       // Prepare specifications and certificates
       const validSpecs = specifications
@@ -307,30 +420,56 @@ export default function SubmitAuction() {
         .filter(cert => cert.name.trim() && cert.issuer.trim())
         .map(({ name, issuer }) => ({ name: name.trim(), issuer: issuer.trim() }));
 
-      // Create auction
-      const { error } = await supabase
-        .from('auctions')
-        .insert({
-          id: auctionId,
-          title: result.data.title,
-          category: result.data.category,
-          description: result.data.description,
-          starting_price: result.data.startingPrice,
-          end_time: result.data.endTime,
-          image_urls: imageUrls,
-          specifications: validSpecs.length > 0 ? validSpecs : null,
-          certificates: validCerts.length > 0 ? validCerts : null,
-          submitted_by: user!.id,
-          approval_status: 'pending',
-          status: 'pending',
-          current_bid: result.data.startingPrice,
-          minimum_increment: parseFloat(formData.get('minimumIncrement') as string) || 100,
-          original_submission_id: prefilledData.originalId || null
-        });
+      if (isEditing && auctionId) {
+        // Update existing auction
+        const { error } = await supabase
+          .from('auctions')
+          .update({
+            title: result.data.title,
+            category: result.data.category,
+            description: result.data.description,
+            starting_price: result.data.startingPrice,
+            end_time: result.data.endTime,
+            image_urls: imageUrls,
+            specifications: validSpecs.length > 0 ? validSpecs : null,
+            certificates: validCerts.length > 0 ? validCerts : null,
+            current_bid: result.data.startingPrice,
+            minimum_increment: parseFloat(formData.get('minimumIncrement') as string) || 100,
+          })
+          .eq('id', auctionId)
+          .eq('submitted_by', user!.id)
+          .eq('approval_status', 'pending');
 
-      if (error) throw error;
+        if (error) throw error;
+        toast.success('Auction updated successfully!');
+      } else {
+        // Create new auction
+        const newAuctionId = `auction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        const { error } = await supabase
+          .from('auctions')
+          .insert({
+            id: newAuctionId,
+            title: result.data.title,
+            category: result.data.category,
+            description: result.data.description,
+            starting_price: result.data.startingPrice,
+            end_time: result.data.endTime,
+            image_urls: imageUrls,
+            specifications: validSpecs.length > 0 ? validSpecs : null,
+            certificates: validCerts.length > 0 ? validCerts : null,
+            submitted_by: user!.id,
+            approval_status: 'pending',
+            status: 'pending',
+            current_bid: result.data.startingPrice,
+            minimum_increment: parseFloat(formData.get('minimumIncrement') as string) || 100,
+            original_submission_id: prefilledData.originalId || null
+          });
 
-      toast.success('Auction submitted for approval!');
+        if (error) throw error;
+        toast.success('Auction submitted for approval!');
+      }
+      
       navigate('/dashboard');
     } catch (error: any) {
       console.error('Error submitting auction:', error);
@@ -358,10 +497,14 @@ export default function SubmitAuction() {
         <div className="max-w-3xl mx-auto">
           <Card>
             <CardHeader>
-              <CardTitle className="text-3xl">Submit Auction Item</CardTitle>
+              <CardTitle className="text-3xl">
+                {isEditing ? 'Edit Auction Item' : 'Submit Auction Item'}
+              </CardTitle>
               <CardDescription>
-                Submit your luxury item for auction approval. All submissions are reviewed by our team.
-                {prefilledData.title && (
+                {isEditing 
+                  ? 'Update your auction submission. Changes will be reviewed by our team.'
+                  : 'Submit your luxury item for auction approval. All submissions are reviewed by our team.'}
+                {prefilledData.title && !isEditing && (
                   <span className="block mt-2 text-sm font-medium text-gold">
                     ✨ Form pre-filled with your previous submission data
                   </span>
@@ -394,7 +537,12 @@ export default function SubmitAuction() {
                         <span className="text-sm text-muted-foreground">Loading categories...</span>
                       </div>
                     ) : (
-                    <Select name="category" defaultValue={prefilledData.category || ''} required>
+                    <Select 
+                      name="category" 
+                      value={selectedCategory || prefilledData.category || ''} 
+                      onValueChange={(value) => setSelectedCategory(value)}
+                      required
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
@@ -468,6 +616,7 @@ export default function SubmitAuction() {
                       name="endTime"
                       type="datetime-local"
                       min={new Date().toISOString().slice(0, 16)}
+                      defaultValue={prefilledData.endTime ? new Date(prefilledData.endTime).toISOString().slice(0, 16) : ''}
                       required
                     />
                   </div>
@@ -500,7 +649,7 @@ export default function SubmitAuction() {
                       </div>
                     ))}
                     
-                    {images.length < 10 && (
+                    {(images.length + existingImageUrls.length) < 10 && (
                       <label className="aspect-square border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gold transition-colors">
                         <Upload className="h-8 w-8 text-muted-foreground mb-2" />
                         <span className="text-sm text-muted-foreground">Upload</span>

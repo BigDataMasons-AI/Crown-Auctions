@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { Loader2, Check, X, Clock, Eye, Play, Pause, Tag } from 'lucide-react';
 import { CategoriesManagement } from '@/components/CategoriesManagement';
+import { useCategoryName } from '@/hooks/useCategoryName';
 
 interface Auction {
   id: string;
@@ -36,6 +37,7 @@ interface Auction {
 export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
+  const { getCategoryName } = useCategoryName();
   const navigate = useNavigate();
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [originalAuctions, setOriginalAuctions] = useState<Map<string, Auction>>(new Map());
@@ -412,7 +414,7 @@ export default function AdminDashboard() {
               )}
             </div>
             <div className="space-y-1 text-sm text-muted-foreground">
-              <p>Category: {auction.category}</p>
+              <p>Category: {getCategoryName(auction.category)}</p>
               <p>Starting Price: ${Number(auction.starting_price).toLocaleString()}</p>
               <p>Current Bid: ${Number(auction.current_bid).toLocaleString()}</p>
               <p>Submitted: {new Date(auction.created_at).toLocaleDateString()}</p>
