@@ -48,10 +48,10 @@ export const AuctionComparisonView = ({ original, resubmitted, adminComments, on
     changed: boolean;
   }) => (
     <div className={`p-3 rounded-lg border ${changed ? 'border-gold/50 bg-gold/5' : 'border-border'}`}>
-      <p className="text-sm font-medium mb-2 flex items-center gap-2">
+      <div className="text-sm font-medium mb-2 flex items-center gap-2">
         {label}
         {changed && <Badge variant="outline" className="text-xs bg-gold/10 text-gold border-gold/30">Changed</Badge>}
-      </p>
+      </div>
       <div className="flex items-center gap-2">
         <div className="flex-1">
           <p className="text-xs text-muted-foreground mb-1">Original</p>
@@ -141,10 +141,10 @@ export const AuctionComparisonView = ({ original, resubmitted, adminComments, on
 
               {descriptionChanged && (
                 <div className="p-3 rounded-lg border border-gold/50 bg-gold/5">
-                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <div className="text-sm font-medium mb-2 flex items-center gap-2">
                     Description
                     <Badge variant="outline" className="text-xs bg-gold/10 text-gold border-gold/30">Changed</Badge>
-                  </p>
+                  </div>
                   <div className="space-y-3">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Original</p>

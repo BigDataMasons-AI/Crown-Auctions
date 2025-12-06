@@ -4,7 +4,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { Navigation } from '@/components/Navigation';
-import { AuctionComparisonView } from '@/components/AuctionComparisonView';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,9 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Loader2, Check, X, Clock, Eye, Play, Pause, Tag } from 'lucide-react';
+import { Loader2, Check, X, Clock, Eye, Play, Pause, Tag, Pencil } from 'lucide-react';
 import { CategoriesManagement } from '@/components/CategoriesManagement';
 import { useCategoryName } from '@/hooks/useCategoryName';
+import { ResubmissionComparisonDialog } from '@/components/ResubmissionComparisonDialog';
 
 interface Auction {
   id: string;
@@ -48,6 +48,8 @@ export default function AdminDashboard() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [savingComments, setSavingComments] = useState<Set<string>>(new Set());
+  const [comparisonDialogOpen, setComparisonDialogOpen] = useState(false);
+  const [selectedComparisonAuction, setSelectedComparisonAuction] = useState<Auction | null>(null);
 
   useEffect(() => {
     if (!authLoading && !adminLoading) {
@@ -363,6 +365,27 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleApproveFromComparison = async () => {
+    if (!selectedComparisonAuction) return;
+    setProcessing(true);
+    try {
+      await handleApprove(selectedComparisonAuction.id);
+      setComparisonDialogOpen(false);
+      setSelectedComparisonAuction(null);
+    } catch (error) {
+      console.error('Error approving from comparison:', error);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRejectFromComparison = async () => {
+    if (!selectedComparisonAuction) return;
+    setSelectedAuction(selectedComparisonAuction);
+    setComparisonDialogOpen(false);
+    setShowRejectDialog(true);
+  };
+
   if (authLoading || adminLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -445,32 +468,28 @@ export default function AdminDashboard() {
             <p className="text-sm text-muted-foreground">{auction.rejection_reason}</p>
           </div>
         )}
-        {auction.original_submission_id && originalAuctions.get(auction.original_submission_id) && (
-          <div className="mb-4">
-            <AuctionComparisonView
-              original={originalAuctions.get(auction.original_submission_id)!}
-              resubmitted={auction}
-              adminComments={adminComments.get(auction.id)}
-              onAdminCommentChange={(comment) => handleAdminCommentChange(auction.id, comment)}
-              isAdmin={true}
-            />
-            <div className="mt-3 flex justify-end">
+        {auction.original_submission_id && originalAuctions.get(auction.original_submission_id) && auction.approval_status === 'pending' && (
+          <div className="mb-4 flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedComparisonAuction(auction);
+                setComparisonDialogOpen(true);
+              }}
+            >
+              Compare
+            </Button>
+            {auction.submitted_by === user?.id && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => saveAdminComment(auction.id)}
-                disabled={savingComments.has(auction.id)}
+                onClick={() => navigate(`/submit-auction/${auction.id}`)}
               >
-                {savingComments.has(auction.id) ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Comment'
-                )}
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
               </Button>
-            </div>
+            )}
           </div>
         )}
         <div className="flex gap-2 flex-wrap">
@@ -482,7 +501,7 @@ export default function AdminDashboard() {
             <Eye className="h-4 w-4 mr-2" />
             View Details
           </Button>
-          {auction.approval_status === 'pending' && (
+          {auction.approval_status === 'pending' && !auction.original_submission_id && (
             <>
               <Button
                 variant="default"
@@ -707,6 +726,21 @@ export default function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Resubmission Comparison Dialog */}
+      {selectedComparisonAuction && originalAuctions.get(selectedComparisonAuction.original_submission_id!) && (
+        <ResubmissionComparisonDialog
+          open={comparisonDialogOpen}
+          onOpenChange={setComparisonDialogOpen}
+          original={originalAuctions.get(selectedComparisonAuction.original_submission_id!)!}
+          resubmitted={selectedComparisonAuction}
+          onApprove={handleApproveFromComparison}
+          onReject={handleRejectFromComparison}
+          onCommentChange={(comment) => handleAdminCommentChange(selectedComparisonAuction.id, comment)}
+          adminComments={adminComments.get(selectedComparisonAuction.id)}
+          processing={processing}
+        />
+      )}
     </div>
   );
 }

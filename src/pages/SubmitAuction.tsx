@@ -93,13 +93,19 @@ export default function SubmitAuction() {
           .select('*')
           .eq('id', auctionId)
           .eq('submitted_by', user.id)
-          .eq('approval_status', 'pending')
           .single();
 
         if (error) throw error;
 
         if (!auction) {
-          toast.error('Auction not found or cannot be edited');
+          toast.error('Auction not found');
+          navigate('/dashboard');
+          return;
+        }
+
+        // Block access if auction is already approved or rejected
+        if (auction.approval_status !== 'pending') {
+          toast.error(`This auction has been ${auction.approval_status} and cannot be edited`);
           navigate('/dashboard');
           return;
         }
@@ -195,10 +201,120 @@ export default function SubmitAuction() {
     fetchCategories();
   }, []);
 
-  // Check for pre-filled data from URL parameters
+  // Check for resubmit - load full auction data
+  useEffect(() => {
+    const resubmitId = searchParams.get('resubmit');
+    if (resubmitId && user && !isEditing) {
+      const loadAuctionForResubmit = async () => {
+        try {
+          const { data: auction, error } = await supabase
+            .from('auctions')
+            .select('*')
+            .eq('id', resubmitId)
+            .eq('submitted_by', user.id)
+            .single();
+
+          if (error) throw error;
+
+          if (!auction) {
+            toast.error('Auction not found');
+            navigate('/dashboard');
+            return;
+          }
+
+          // Block access if auction is not rejected (only rejected auctions can be resubmitted)
+          if (auction.approval_status !== 'rejected') {
+            toast.error(`This auction has been ${auction.approval_status} and cannot be resubmitted`);
+            navigate('/dashboard');
+            return;
+          }
+
+          // Check if this auction has already been resubmitted
+          const { data: existingResubmission } = await supabase
+            .from('auctions')
+            .select('id, approval_status')
+            .eq('original_submission_id', auction.id)
+            .eq('submitted_by', user.id)
+            .maybeSingle();
+
+          if (existingResubmission) {
+            toast.error('This auction has already been resubmitted');
+            navigate('/dashboard');
+            return;
+          }
+
+          // Set form values
+          setPrefilledData({
+            title: auction.title,
+            category: auction.category,
+            description: auction.description,
+            startingPrice: auction.starting_price.toString(),
+            minimumIncrement: auction.minimum_increment?.toString() || '100',
+            endTime: auction.end_time,
+            originalId: auction.id,
+          });
+          
+          // Set selected category for controlled Select component
+          setSelectedCategory(auction.category);
+
+          // Set specifications
+          if (auction.specifications && Array.isArray(auction.specifications) && auction.specifications.length > 0) {
+            setSpecifications(
+              auction.specifications.map((spec: any, index: number) => ({
+                id: String(index + 1),
+                label: spec.label || '',
+                value: spec.value || '',
+              }))
+            );
+          }
+
+          // Set certificates
+          if (auction.certificates && Array.isArray(auction.certificates) && auction.certificates.length > 0) {
+            setCertificates(
+              auction.certificates.map((cert: any, index: number) => ({
+                id: String(index + 1),
+                name: cert.name || '',
+                issuer: cert.issuer || '',
+              }))
+            );
+          }
+
+          // Load existing images for preview
+          if (auction.image_urls && auction.image_urls.length > 0) {
+            const imageUrls = auction.image_urls;
+            setExistingImageUrls(imageUrls);
+            
+            // Convert storage paths to public URLs for preview
+            const previewUrls = imageUrls.map((url: string) => {
+              if (url.startsWith('http://') || url.startsWith('https://')) {
+                return url;
+              }
+              return supabase.storage.from('auction-images').getPublicUrl(url).data.publicUrl;
+            });
+            setImagePreviews(previewUrls);
+          }
+
+          toast.info('Form pre-filled with your rejected submission data. Please review and make any necessary changes before resubmitting.', {
+            duration: 5000,
+          });
+        } catch (error: any) {
+          console.error('Error loading auction for resubmit:', error);
+          toast.error('Failed to load auction data');
+          navigate('/dashboard');
+        }
+      };
+
+      loadAuctionForResubmit();
+    }
+  }, [searchParams, user, navigate, isEditing]);
+
+  // Check for pre-filled data from URL parameters (legacy support)
   useEffect(() => {
     const isPrefill = searchParams.get('prefill') === 'true';
-    if (isPrefill) {
+    const resubmitId = searchParams.get('resubmit');
+    
+    // Skip if resubmit is being used (handled above)
+    if (isPrefill && !resubmitId) {
       const title = searchParams.get('title');
       const category = searchParams.get('category');
       const description = searchParams.get('description');
@@ -270,7 +386,7 @@ export default function SubmitAuction() {
       // Remove from new images
       const newIndex = index - existingImageUrls.length;
       setImages(images.filter((_, i) => i !== newIndex));
-      setImagePreviews(imagePreviews.filter((_, i) => i !== index));
+    setImagePreviews(imagePreviews.filter((_, i) => i !== index));
     }
   };
 
@@ -385,8 +501,9 @@ export default function SubmitAuction() {
         return;
       }
 
-      // Validate images - allow existing images if editing
-      if (images.length === 0 && (!isEditing || existingImageUrls.length === 0)) {
+      // Validate images - allow existing images if editing or resubmitting
+      const hasExistingImages = existingImageUrls.length > 0;
+      if (images.length === 0 && !hasExistingImages) {
         toast.error('Please upload at least one image');
         setSubmitting(false);
         return;
@@ -403,12 +520,22 @@ export default function SubmitAuction() {
           imageUrls = existingImageUrls;
         }
       } else {
-        // Generate auction ID for new submission
+        // Generate auction ID for new submission or resubmission
         const newAuctionId = `auction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Upload images
-        toast.info('Uploading images...');
-        imageUrls = await uploadImages(newAuctionId);
+        // If resubmitting with existing images and no new images, use existing images
+        if (hasExistingImages && images.length === 0) {
+          imageUrls = existingImageUrls;
+        } else {
+          // Upload new images
+          if (images.length > 0) {
+            toast.info('Uploading images...');
+            imageUrls = await uploadImages(newAuctionId);
+          } else if (hasExistingImages) {
+            // Use existing images for resubmission
+            imageUrls = existingImageUrls;
+          }
+        }
       }
 
       // Prepare specifications and certificates
@@ -446,30 +573,30 @@ export default function SubmitAuction() {
         // Create new auction
         const newAuctionId = `auction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        const { error } = await supabase
-          .from('auctions')
-          .insert({
+      const { error } = await supabase
+        .from('auctions')
+        .insert({
             id: newAuctionId,
-            title: result.data.title,
-            category: result.data.category,
-            description: result.data.description,
-            starting_price: result.data.startingPrice,
-            end_time: result.data.endTime,
-            image_urls: imageUrls,
-            specifications: validSpecs.length > 0 ? validSpecs : null,
-            certificates: validCerts.length > 0 ? validCerts : null,
-            submitted_by: user!.id,
-            approval_status: 'pending',
-            status: 'pending',
-            current_bid: result.data.startingPrice,
-            minimum_increment: parseFloat(formData.get('minimumIncrement') as string) || 100,
-            original_submission_id: prefilledData.originalId || null
-          });
+          title: result.data.title,
+          category: result.data.category,
+          description: result.data.description,
+          starting_price: result.data.startingPrice,
+          end_time: result.data.endTime,
+          image_urls: imageUrls,
+          specifications: validSpecs.length > 0 ? validSpecs : null,
+          certificates: validCerts.length > 0 ? validCerts : null,
+          submitted_by: user!.id,
+          approval_status: 'pending',
+          status: 'pending',
+          current_bid: result.data.startingPrice,
+          minimum_increment: parseFloat(formData.get('minimumIncrement') as string) || 100,
+          original_submission_id: prefilledData.originalId || null
+        });
 
-        if (error) throw error;
+      if (error) throw error;
         toast.success('Auction submitted for approval!');
       }
-      
+
       navigate('/dashboard');
     } catch (error: any) {
       console.error('Error submitting auction:', error);

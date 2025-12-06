@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, Heart, Gavel, FileText, Clock, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { Loader2, Heart, Gavel, FileText, Clock, CheckCircle, XCircle, Trash2, RefreshCw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCategoryName } from '@/hooks/useCategoryName';
 
@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [updating, setUpdating] = useState(false);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
   const [enrichedSavedAuctions, setEnrichedSavedAuctions] = useState<any[]>([]);
+  const [resubmittedAuctionIds, setResubmittedAuctionIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -91,6 +92,22 @@ export default function Dashboard() {
           if (originals) {
             const originalsMap = new Map(originals.map(o => [o.id, o]));
             setOriginalSubmissions(originalsMap);
+          }
+        }
+
+        // Check which rejected auctions have been resubmitted
+        const rejectedAuctions = submissionsRes.data.filter((s: any) => s.approval_status === 'rejected');
+        if (rejectedAuctions.length > 0) {
+          const rejectedIds = rejectedAuctions.map((s: any) => s.id);
+          const { data: resubmissions } = await supabase
+            .from('auctions')
+            .select('original_submission_id')
+            .in('original_submission_id', rejectedIds)
+            .eq('submitted_by', user!.id);
+
+          if (resubmissions) {
+            const resubmittedIds = new Set(resubmissions.map((r: any) => r.original_submission_id).filter(Boolean));
+            setResubmittedAuctionIds(resubmittedIds);
           }
         }
       }
@@ -551,9 +568,21 @@ export default function Dashboard() {
                                         <p className="text-sm text-muted-foreground">{submission.rejection_reason}</p>
                                       </div>
                                     )}
-                                    <Button asChild size="sm" variant="outline">
-                                      <Link to="/submit-auction">Submit Another Item</Link>
-                                    </Button>
+                                    {!resubmittedAuctionIds.has(submission.id) && (
+                                      <div className="flex gap-2">
+                                        <Button asChild size="sm" className="bg-gold hover:bg-gold/90">
+                                          <Link 
+                                            to={`/submit-auction?resubmit=${encodeURIComponent(submission.id)}`}
+                                          >
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                            Resubmit
+                                          </Link>
+                                        </Button>
+                                        <Button asChild size="sm" variant="outline">
+                                          <Link to="/submit-auction">Submit Another Item</Link>
+                                        </Button>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </CardContent>
