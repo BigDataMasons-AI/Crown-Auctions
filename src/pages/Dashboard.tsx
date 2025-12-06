@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [enrichedSavedAuctions, setEnrichedSavedAuctions] = useState<any[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -48,7 +49,31 @@ export default function Dashboard() {
       ]);
 
       if (profileRes.data) setProfile(profileRes.data);
-      if (savedRes.data) setSavedAuctions(savedRes.data);
+      if (savedRes.data) {
+        setSavedAuctions(savedRes.data);
+        
+        // Enrich saved auctions with auction details
+        const enrichedSaved = await Promise.all(
+          savedRes.data.map(async (saved: any) => {
+            const { data: auctionData, error: auctionError } = await supabase
+              .from('auctions')
+              .select('id, title, image_urls, category, status, approval_status, current_bid, starting_price')
+              .eq('id', saved.auction_id)
+              .maybeSingle();
+            
+            if (auctionError) {
+              console.error(`Error fetching auction ${saved.auction_id}:`, auctionError);
+            }
+            
+            return {
+              ...saved,
+              auction: auctionData || null
+            };
+          })
+        );
+        
+        setEnrichedSavedAuctions(enrichedSaved);
+      }
       if (submissionsRes.data) {
         setSubmissions(submissionsRes.data);
         
@@ -534,7 +559,7 @@ export default function Dashboard() {
 
             <TabsContent value="watchlist" className="mt-6">
               <div className="grid gap-4">
-                {savedAuctions.length === 0 ? (
+                {enrichedSavedAuctions.length === 0 ? (
                   <Card>
                     <CardContent className="flex flex-col items-center justify-center py-12">
                       <Heart className="h-12 w-12 text-muted-foreground mb-4" />
@@ -545,25 +570,88 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 ) : (
-                  savedAuctions.map((auction) => (
-                    <Card key={auction.id}>
-                      <CardContent className="flex items-center justify-between p-6">
-                        <div>
-                          <h3 className="font-semibold">Auction #{auction.auction_id}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Saved on {new Date(auction.saved_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRemoveSaved(auction.id)}
-                        >
-                          Remove
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))
+                  enrichedSavedAuctions.map((savedAuction: any) => {
+                    const auction = savedAuction.auction;
+                    const auctionNotFound = !auction;
+                    
+                    // Handle image URL - check if it's already a full URL or needs storage path conversion
+                    let imageUrl = '/placeholder.svg';
+                    if (auction?.image_urls && auction.image_urls.length > 0) {
+                      const firstImage = auction.image_urls[0];
+                      if (firstImage.startsWith('http://') || firstImage.startsWith('https://')) {
+                        imageUrl = firstImage;
+                      } else {
+                        imageUrl = supabase.storage.from('auction-images').getPublicUrl(firstImage).data.publicUrl;
+                      }
+                    }
+                    
+                    return (
+                      <Card key={savedAuction.id} className={auctionNotFound ? 'border-orange-500/30' : ''}>
+                        <CardContent className="p-6">
+                          <div className="flex items-start gap-4">
+                            {auction && (
+                              <img 
+                                src={imageUrl} 
+                                alt={auction.title || 'Auction'}
+                                className="w-24 h-24 object-cover rounded-lg"
+                              />
+                            )}
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-semibold text-lg">
+                                  {auction?.title || `Auction #${savedAuction.auction_id}`}
+                                </h3>
+                                {auctionNotFound ? (
+                                  <Badge variant="secondary" className="bg-orange-500/10 text-orange-700 border-orange-500/20">
+                                    Auction Unavailable
+                                  </Badge>
+                                ) : (
+                                  auction?.category && (
+                                    <Badge variant="outline">{auction.category}</Badge>
+                                  )
+                                )}
+                              </div>
+                              <div className="space-y-1 text-sm text-muted-foreground">
+                                {auctionNotFound ? (
+                                  <p className="text-orange-600 font-medium mb-2">
+                                    ⚠️ This auction is no longer available
+                                  </p>
+                                ) : (
+                                  <>
+                                    {auction.current_bid > 0 && (
+                                      <p>Current Bid: ${Number(auction.current_bid).toLocaleString()}</p>
+                                    )}
+                                    {auction.starting_price && (
+                                      <p>Starting Price: ${Number(auction.starting_price).toLocaleString()}</p>
+                                    )}
+                                  </>
+                                )}
+                                <p>Saved on {new Date(savedAuction.saved_at).toLocaleDateString()}</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              {!auctionNotFound && (
+                                <Button asChild size="sm">
+                                  <Link to={`/auction/${savedAuction.auction_id}`}>
+                                    View Details
+                                  </Link>
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRemoveSaved(savedAuction.id)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
                 )}
               </div>
             </TabsContent>
@@ -609,7 +697,7 @@ export default function Dashboard() {
                             )}
                             <div className="flex-1 space-y-2">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-semibold">
+                                <h3 className="font-semibold text-lg">
                                   {auction?.title || `Auction #${bid.auction_id}`}
                                 </h3>
                                 {auctionNotFound ? (
@@ -648,9 +736,9 @@ export default function Dashboard() {
                             </div>
                             {!auctionNotFound && (
                               <div className="flex flex-col gap-2">
-                                <Button asChild size="sm" variant={bid.isWinning ? 'outline' : 'default'}>
+                                <Button asChild size="sm">
                                   <Link to={`/auction/${bid.auction_id}`}>
-                                    {bid.isWinning ? 'View' : 'Rebid Now'}
+                                    View Details
                                   </Link>
                                 </Button>
                               </div>
