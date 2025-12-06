@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 
 export default function Auth() {
   const { signUp, signIn } = useAuth();
@@ -125,6 +126,15 @@ export default function Auth() {
             </Tabs>
           </CardContent>
         </Card>
+
+        <div className="text-center">
+          <Button asChild variant="outline" className="w-full">
+            <Link to="/">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Website
+            </Link>
+          </Button>
+        </div>
       </div>
     </div>
   );

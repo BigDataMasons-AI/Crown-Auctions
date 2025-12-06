@@ -32,9 +32,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+        // Explicitly handle SIGNED_OUT event
+        if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+        } else {
+          setSession(session);
+          setUser(session?.user ?? null);
+          setLoading(false);
+        }
       }
     );
 
@@ -108,9 +115,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    toast.success('Signed out successfully');
-    navigate('/');
+    try {
+      // Sign out from Supabase - this will trigger the auth state change listener
+      // with SIGNED_OUT event, which will clear user and session state
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        toast.error('Failed to sign out');
+        console.error('Sign out error:', error);
+        return;
+      }
+      
+      // Small delay to ensure auth state change propagates
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      toast.success('Signed out successfully');
+      navigate('/', { replace: true });
+    } catch (error: any) {
+      console.error('Sign out error:', error);
+      toast.error('Failed to sign out');
+    }
   };
 
   return (
